@@ -98,9 +98,6 @@ export default function CategoriesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">카테고리</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            카테고리별로 노트를 관리하세요
-          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setDialogOpen(true)}>

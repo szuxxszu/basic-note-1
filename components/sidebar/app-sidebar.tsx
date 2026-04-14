@@ -50,15 +50,9 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="/notes">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                  <FileText className="size-4" />
-                </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-semibold tracking-tight">
-                    just note
-                  </span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    개인 보안 노트
+                    basic note
                   </span>
                 </div>
               </Link>

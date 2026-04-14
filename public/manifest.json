@@ -1,7 +1,7 @@
 {
-  "name": "just note",
-  "short_name": "just note",
-  "description": "개인용 보안 노트",
+  "name": "basic note",
+  "short_name": "basic note",
+  "description": "basic note",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#09090b",

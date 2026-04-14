@@ -17,13 +17,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "just note",
-  description: "개인용 보안 노트",
+  title: "basic note",
+  description: "basic note",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "just note",
+    title: "basic note",
   },
 };
 

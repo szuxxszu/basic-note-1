@@ -48,9 +48,6 @@ export default function CalendarPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">캘린더</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            날짜별 노트를 확인하세요
-          </p>
         </div>
         <Button onClick={handleCreate}>
           <Plus className="mr-2 h-4 w-4" />

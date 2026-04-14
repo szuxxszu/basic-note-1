@@ -7,9 +7,6 @@ export default function SettingsPage() {
     <div className="grid gap-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">설정</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          앱 설정을 관리하세요
-        </p>
       </div>
 
       {/* Phase 7에서 설정 페이지 구현 */}
