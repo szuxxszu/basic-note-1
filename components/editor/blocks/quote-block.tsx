@@ -1,0 +1,57 @@
+"use client";
+
+import { useRef, useEffect, useCallback } from "react";
+import type { BlockComponentProps } from "../block-types";
+
+export function QuoteBlock({
+  content,
+  indent,
+  onContentChange,
+  onKeyDown,
+  onFocus,
+  registerRef,
+  isFocused,
+}: BlockComponentProps) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    registerRef(ref.current);
+  }, [registerRef]);
+
+  useEffect(() => {
+    if (ref.current && ref.current.textContent !== content) {
+      ref.current.textContent = content;
+    }
+  }, [content]);
+
+  useEffect(() => {
+    if (isFocused && ref.current && document.activeElement !== ref.current) {
+      ref.current.focus();
+    }
+  }, [isFocused]);
+
+  const handleInput = useCallback(() => {
+    if (ref.current) {
+      onContentChange(ref.current.textContent ?? "");
+    }
+  }, [onContentChange]);
+
+  return (
+    <div
+      className="flex items-stretch"
+      style={{ paddingLeft: `${indent * 1.5}rem` }}
+    >
+      <div className="w-1 shrink-0 rounded-full bg-primary/40 mr-3" />
+      <div
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        className="outline-none min-h-[1.5em] leading-relaxed text-muted-foreground italic flex-1"
+        onInput={handleInput}
+        onKeyDown={onKeyDown}
+        onFocus={onFocus}
+        data-placeholder="인용문"
+      />
+    </div>
+  );
+}
