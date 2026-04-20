@@ -94,6 +94,9 @@ const CRYPTO_BROADCAST_CHANNEL = "bn_crypto";
 
 type CryptoBroadcastMessage = {
   type: "setup" | "unlock" | "lock" | "reset";
+  /** Sender's current encryptedMasterKey. Receiver can skip locking when it
+   *  already holds the same wrapper, avoiding needless re-unlock prompts. */
+  wrapper?: string;
 };
 
 const CryptoContext = createContext<CryptoContextValue | null>(null);
@@ -258,8 +261,11 @@ export function CryptoProvider({ children }: { children: ReactNode }) {
     }
   }, [settings?.encryptedMasterKey, cryptoKey]);
 
-  // Cross-tab broadcast: when any tab sets up / unlocks / locks / resets, other
-  // tabs lock themselves so they can't operate with a stale cryptoKey.
+  // Cross-tab broadcast. Rules:
+  //  - lock / reset → always lock this tab (security + data rotation)
+  //  - setup / unlock → only lock if our wrapper differs from sender's, i.e.
+  //    the master key actually changed. Same wrapper = same key = no-op so
+  //    unlocking one tab doesn't kick the other out.
   useEffect(() => {
     if (typeof window === "undefined" || typeof BroadcastChannel === "undefined") return;
     const bc = new BroadcastChannel(CRYPTO_BROADCAST_CHANNEL);
@@ -267,12 +273,26 @@ export function CryptoProvider({ children }: { children: ReactNode }) {
     bc.onmessage = (event) => {
       const msg = event.data as CryptoBroadcastMessage | null;
       if (!msg?.type) return;
-      // Any state change in another tab → drop our cryptoKey; user re-unlocks.
-      stopAutoSync();
-      clearSession();
-      setCryptoKey(null);
-      loadedWrapperRef.current = null;
-      autoUnlockAttempted.current = false;
+
+      const dropKey = () => {
+        stopAutoSync();
+        clearSession();
+        setCryptoKey(null);
+        loadedWrapperRef.current = null;
+        autoUnlockAttempted.current = false;
+      };
+
+      if (msg.type === "lock" || msg.type === "reset") {
+        dropKey();
+        return;
+      }
+
+      // setup / unlock: compare wrappers
+      if (msg.wrapper && loadedWrapperRef.current === msg.wrapper) {
+        // Same master key — this tab is already in sync, do nothing.
+        return;
+      }
+      dropKey();
     };
     return () => {
       bc.close();
@@ -336,7 +356,10 @@ export function CryptoProvider({ children }: { children: ReactNode }) {
     await syncPushSettings();
     startAutoSync();
     try {
-      bcRef.current?.postMessage({ type: "setup" } satisfies CryptoBroadcastMessage);
+      bcRef.current?.postMessage({
+        type: "setup",
+        wrapper: result.encryptedMasterKey,
+      } satisfies CryptoBroadcastMessage);
     } catch {}
   }, []);
 
@@ -360,7 +383,10 @@ export function CryptoProvider({ children }: { children: ReactNode }) {
         syncPush().then(() => syncPull());
         startAutoSync();
         try {
-          bcRef.current?.postMessage({ type: "unlock" } satisfies CryptoBroadcastMessage);
+          bcRef.current?.postMessage({
+            type: "unlock",
+            wrapper: settings.encryptedMasterKey,
+          } satisfies CryptoBroadcastMessage);
         } catch {}
         return true;
       }
@@ -413,7 +439,10 @@ export function CryptoProvider({ children }: { children: ReactNode }) {
       syncPush().then(() => syncPull());
       startAutoSync();
       try {
-        bcRef.current?.postMessage({ type: "unlock" } satisfies CryptoBroadcastMessage);
+        bcRef.current?.postMessage({
+          type: "unlock",
+          wrapper: encryptedMasterKey,
+        } satisfies CryptoBroadcastMessage);
       } catch {}
       return true;
     },
@@ -472,7 +501,10 @@ export function CryptoProvider({ children }: { children: ReactNode }) {
       saveSession(newPassword);
       await syncPushSettings();
       try {
-        bcRef.current?.postMessage({ type: "unlock" } satisfies CryptoBroadcastMessage);
+        bcRef.current?.postMessage({
+          type: "unlock",
+          wrapper: encryptedMasterKey,
+        } satisfies CryptoBroadcastMessage);
       } catch {}
       return true;
     },
@@ -513,7 +545,10 @@ export function CryptoProvider({ children }: { children: ReactNode }) {
       syncPush().then(() => syncPull());
       startAutoSync();
       try {
-        bcRef.current?.postMessage({ type: "unlock" } satisfies CryptoBroadcastMessage);
+        bcRef.current?.postMessage({
+          type: "unlock",
+          wrapper: encryptedMasterKey,
+        } satisfies CryptoBroadcastMessage);
       } catch {}
       return true;
     },
