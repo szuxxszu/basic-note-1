@@ -16,6 +16,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarSeparator,
+  SidebarTrigger,
 } from "@minnjii/dx-kit/ui/sidebar";
 import {
   FileText,
@@ -49,16 +50,19 @@ export function AppSidebar() {
     <>
     <Sidebar variant="sidebar" collapsible="icon">
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild tooltip="basic note">
-              <Link href="/notes">
-                <span className="logo-icon size-4 shrink-0 rounded-sm bg-foreground text-background text-[10px] font-bold leading-none text-center mt-[8px]" style={{lineHeight:"16px"}}>b</span>
-                <span className="font-semibold tracking-tight text-sm">basic note</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <div className="flex items-center gap-2 mt-[5px]">
+          <SidebarMenu className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild tooltip="basic note">
+                <Link href="/notes">
+                  <span className="logo-icon size-4 shrink-0 rounded-sm bg-foreground text-background text-[10px] font-bold leading-none text-center mt-[8px]" style={{lineHeight:"16px"}}>b</span>
+                  <span className="font-semibold tracking-tight text-sm">basic note</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+          <SidebarTrigger className="shrink-0" />
+        </div>
       </SidebarHeader>
 
       <SidebarContent>
@@ -101,18 +105,18 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
-        <SidebarMenu>
+        <SidebarMenu className="mb-[8px]">
           <SidebarMenuItem>
             <SidebarMenuButton asChild tooltip={t("nav.settings")}>
               <Link href="/settings">
-                <Settings />
+                <Settings className="h-4 w-4" />
                 <span>{t("nav.settings")}</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={lock} tooltip={t("nav.lock")}>
-              <Lock />
+              <Lock className="h-4 w-4" />
               <span>{t("nav.lock")}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>

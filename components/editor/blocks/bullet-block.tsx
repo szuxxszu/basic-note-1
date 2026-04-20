@@ -27,7 +27,7 @@ export function BulletBlock({
     if (ref.current.textContent !== content) {
       ref.current.textContent = content;
     }
-  }, [content]);
+  }, [content, isFocused]);
 
   useEffect(() => {
     if (isFocused && ref.current && document.activeElement !== ref.current) {

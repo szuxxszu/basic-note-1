@@ -63,10 +63,10 @@ function CategoryBranch({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <div role="button" tabIndex={0} className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground cursor-pointer">
-                <MoreVertical className="h-3.5 w-3.5" />
+                <MoreVertical className="h-4 w-4" />
               </div>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align="end" className="min-w-[166px]">
               <DropdownMenuItem onClick={() => onEditCategory(node.id, node.name)}>
                 <Pencil className="h-4 w-4" />
                 {t("common.edit")}

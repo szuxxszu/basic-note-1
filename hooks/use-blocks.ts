@@ -9,6 +9,7 @@ import { getOrderBetween } from "@/lib/fractional-index";
 import type { Block, BlockType, BlockMeta } from "@/lib/types";
 import { syncPushEntity } from "@/lib/sync/engine";
 import { looksLikeCiphertext } from "@/lib/crypto";
+import { isLockError } from "@/lib/decrypt-diagnostics";
 import { tr } from "@/lib/i18n";
 
 export interface DecryptedBlock extends Block {
@@ -40,8 +41,10 @@ export function useBlocks(noteId: string) {
               const text = await decryptText(block.content);
               decryptedContent = looksLikeCiphertext(text) ? tr("lock.decryptFail") : text;
             }
-          } catch {
-            decryptedContent = tr("lock.decryptFail");
+          } catch (e) {
+            // Transient lock (cryptoKey briefly null): leave content empty
+            // instead of poisoning React state with a sticky fail label.
+            decryptedContent = isLockError(e) ? "" : tr("lock.decryptFail");
           }
           return { ...block, decryptedContent } as DecryptedBlock;
         })

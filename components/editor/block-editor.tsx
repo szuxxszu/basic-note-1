@@ -294,8 +294,11 @@ export function BlockEditor({ noteId }: BlockEditorProps) {
 
         const existing = saveTimers.current.get(block.id);
         if (existing) clearTimeout(existing);
+        saveTimers.current.delete(block.id);
         updateBlock(block.id, { content: before });
-        if (el) el.textContent = before;
+        // Do NOT overwrite el.textContent here — that collapses the caret to
+        // position 0 and the user sees it jump before the new block takes over.
+        // Block components resync DOM to `content` on blur via the isFocused dep.
 
         const newType: BlockType =
           ["bullet", "numbered", "todo"].includes(block.type)
@@ -314,11 +317,24 @@ export function BlockEditor({ noteId }: BlockEditorProps) {
       if (e.key === "Backspace" && liveContent === "") {
         if (block.type !== "text") {
           e.preventDefault();
-          updateBlock(block.id, { type: "text", indent: 0 });
+          // Cancel any pending debounced save — its captured content would
+          // otherwise race with this type conversion and briefly resurrect
+          // the just-deleted text after the block re-renders as Text.
+          const pending = saveTimers.current.get(block.id);
+          if (pending) {
+            clearTimeout(pending);
+            saveTimers.current.delete(block.id);
+          }
+          updateBlock(block.id, { type: "text", indent: 0, content: "" });
           return;
         }
         if (blocks.length > 1) {
           e.preventDefault();
+          const pending = saveTimers.current.get(block.id);
+          if (pending) {
+            clearTimeout(pending);
+            saveTimers.current.delete(block.id);
+          }
           deleteBlock(block.id);
           focusBlock(Math.max(0, index - 1), true);
           return;

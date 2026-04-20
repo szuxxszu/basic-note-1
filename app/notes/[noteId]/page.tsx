@@ -8,13 +8,14 @@ import { db } from "@/lib/db";
 import { useCrypto } from "@/components/providers/crypto-provider";
 import { useNotes } from "@/hooks/use-notes";
 import { looksLikeCiphertext } from "@/lib/crypto";
+import { isLockError } from "@/lib/decrypt-diagnostics";
 import { BlockEditor } from "@/components/editor/block-editor";
 import { NoteTitle } from "@/components/editor/note-title";
 import { Button } from "@minnjii/dx-kit/ui/button";
 import { Popover, PopoverTrigger, PopoverContent } from "@minnjii/dx-kit/ui/popover";
 import { Calendar } from "@minnjii/dx-kit/ui/calendar";
 import { ko, enUS } from "date-fns/locale";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -47,7 +48,7 @@ export default function NoteEditorPage({
 }) {
   const { noteId } = use(params);
   const router = useRouter();
-  const { decryptText } = useCrypto();
+  const { decryptText, isUnlocked } = useCrypto();
   const { updateNoteTitle, updateNoteDate, deleteNote, togglePin, moveToCategory } = useNotes();
   const { categories } = useCategories();
   const { t, language } = useLanguage();
@@ -59,11 +60,14 @@ export default function NoteEditorPage({
 
   // Decrypt title
   useEffect(() => {
-    if (!note) return;
+    if (!note || !isUnlocked) return;
     decryptText(note.title)
       .then((text) => setTitle(looksLikeCiphertext(text) ? t("lock.decryptFail") : text))
-      .catch(() => setTitle(t("lock.decryptFail")));
-  }, [note, decryptText, t]);
+      .catch((e) => {
+        if (isLockError(e)) return; // transient lock — don't stick "(복호화 실패)" into state
+        setTitle(t("lock.decryptFail"));
+      });
+  }, [note, isUnlocked, decryptText, t]);
 
   const handleTitleChange = useCallback(
     (newTitle: string) => {
@@ -101,13 +105,25 @@ export default function NoteEditorPage({
           <ArrowLeft className="h-4 w-4" />
           {t("editor.back")}
         </Button>
+      </div>
+
+      {/* Category + More */}
+      <div className="flex items-center justify-between">
+        <span className="-ml-[1px] flex items-center gap-1.5 text-sm text-muted-foreground">
+          {note.categoryId ? (
+            <Folder className="h-4 w-4" />
+          ) : (
+            <Inbox className="h-4 w-4" />
+          )}
+          {categories.find((c) => c.id === note.categoryId)?.name ?? t("editor.uncategorized")}
+        </span>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" className="text-foreground">
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent align="end" className="min-w-[166px]">
             <DropdownMenuItem onClick={() => {
               togglePin(noteId);
               toast.success(note.pinned ? t("editor.unpinned") : t("editor.pinned"));
@@ -195,25 +211,20 @@ export default function NoteEditorPage({
         </DropdownMenu>
       </div>
 
-      {/* Category + Date */}
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-muted-foreground">
-          {categories.find((c) => c.id === note.categoryId)?.name ?? t("editor.uncategorized")}
-        </span>
+      {/* Created + Updated */}
+      <div className="-mt-[23px] flex items-center justify-between text-sm">
         <Popover>
           <PopoverTrigger asChild>
             <Button
               variant="ghost"
               size="sm"
-              className="shrink-0 text-muted-foreground"
+              className="-ml-[13px] shrink-0 text-muted-foreground"
             >
-              <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
-              {language === "ko"
-                ? format(note.createdAt, "M월 d일", { locale: ko })
-                : format(note.createdAt, "MMM d", { locale: enUS })}
+              <CalendarIcon className="mr-1.5 h-4 w-4" />
+              {format(note.createdAt, "yyyy.MM.dd")}
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="end">
+          <PopoverContent className="w-auto p-0" align="start">
             <Calendar
               mode="single"
               selected={new Date(note.createdAt)}
@@ -224,10 +235,16 @@ export default function NoteEditorPage({
             />
           </PopoverContent>
         </Popover>
+        <span className="shrink-0 text-foreground">
+          {formatDistanceToNow(note.updatedAt, {
+            addSuffix: true,
+            locale: language === "ko" ? ko : enUS,
+          })}
+        </span>
       </div>
 
       {/* Title */}
-      <div className="-mt-3">
+      <div className="-mt-[7px]">
         <NoteTitle
           title={title}
           onTitleChange={handleTitleChange}

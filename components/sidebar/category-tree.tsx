@@ -33,7 +33,7 @@ function CategoryNode({ node, depth = 0 }: { node: CategoryTreeNode; depth?: num
         <SidebarMenuItem>
           <CollapsibleTrigger asChild>
             <SidebarMenuButton tooltip={node.name}>
-              <ChevronRight className="transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+              <ChevronRight className="h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
               <span>{node.name}</span>
             </SidebarMenuButton>
           </CollapsibleTrigger>
@@ -87,7 +87,7 @@ export function CategoryTree() {
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton disabled tooltip={t("nav.noCategories")}>
-            <Folder className="opacity-50" />
+            <Folder className="h-4 w-4 opacity-50" />
             <span className="text-muted-foreground text-sm">{t("nav.noCategories")}</span>
           </SidebarMenuButton>
         </SidebarMenuItem>

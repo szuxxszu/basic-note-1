@@ -82,6 +82,7 @@ export function NoteListItem({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="end"
+                  className="min-w-[166px]"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <DropdownMenuLabel>{t("editor.categoryMove")}</DropdownMenuLabel>

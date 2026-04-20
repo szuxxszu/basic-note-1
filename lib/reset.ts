@@ -15,6 +15,16 @@ export const LAST_SYNC_KEY = "securenote_last_sync";
 export async function resetEverything() {
   stopAutoSync();
 
+  // Tell sibling tabs to drop their in-memory cryptoKey before we wipe data,
+  // otherwise they keep encrypting with a stale master key.
+  try {
+    if (typeof BroadcastChannel !== "undefined") {
+      const bc = new BroadcastChannel("bn_crypto");
+      bc.postMessage({ type: "reset" });
+      bc.close();
+    }
+  } catch {}
+
   let remoteWipeOk = true;
 
   try {

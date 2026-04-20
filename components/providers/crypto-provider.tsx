@@ -27,6 +27,7 @@ import {
 } from "@/lib/crypto";
 import { DEFAULT_LOCK_TIMEOUT_MINUTES, VERIFIER_PLAINTEXT } from "@/lib/constants";
 import { RESET_PENDING_KEY, LAST_SYNC_KEY } from "@/lib/reset";
+import { logDecryptFailure, LOCK_ERROR_MESSAGE } from "@/lib/decrypt-diagnostics";
 import {
   syncPull,
   syncPush,
@@ -88,6 +89,12 @@ function clearSession() {
     sessionStorage.removeItem(SESSION_TS_KEY);
   } catch {}
 }
+
+const CRYPTO_BROADCAST_CHANNEL = "bn_crypto";
+
+type CryptoBroadcastMessage = {
+  type: "setup" | "unlock" | "lock" | "reset";
+};
 
 const CryptoContext = createContext<CryptoContextValue | null>(null);
 
@@ -159,6 +166,10 @@ export function CryptoProvider({ children }: { children: ReactNode }) {
   const [pendingRecoveryKey, setPendingRecoveryKey] = useState<string | null>(null);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoUnlockAttempted = useRef(false);
+  // Wrapper this cryptoKey was unwrapped from. If settings.encryptedMasterKey
+  // later diverges (e.g., another tab re-keyed), our cryptoKey is stale.
+  const loadedWrapperRef = useRef<string | null>(null);
+  const bcRef = useRef<BroadcastChannel | null>(null);
 
   const settings = useLiveQuery(() => db.settings.get("settings"), [], null);
 
@@ -217,6 +228,7 @@ export function CryptoProvider({ children }: { children: ReactNode }) {
       }
       if (key) {
         setCryptoKey(key);
+        loadedWrapperRef.current = settings.encryptedMasterKey ?? null;
         saveSession(savedPw);
         syncPush().then(() => syncPull());
         startAutoSync();
@@ -232,6 +244,40 @@ export function CryptoProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 5000);
     return () => clearTimeout(timer);
+  }, []);
+
+  // Detect external re-key (another tab, sync pull, etc.). If the wrapper we
+  // unwrapped from no longer matches the current settings, our cryptoKey is
+  // stale — force-lock so the user re-unlocks with the correct wrapper.
+  useEffect(() => {
+    if (!cryptoKey || !settings) return;
+    const currentWrapper = settings.encryptedMasterKey ?? null;
+    const loaded = loadedWrapperRef.current;
+    if (loaded && currentWrapper && loaded !== currentWrapper) {
+      lock();
+    }
+  }, [settings?.encryptedMasterKey, cryptoKey]);
+
+  // Cross-tab broadcast: when any tab sets up / unlocks / locks / resets, other
+  // tabs lock themselves so they can't operate with a stale cryptoKey.
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof BroadcastChannel === "undefined") return;
+    const bc = new BroadcastChannel(CRYPTO_BROADCAST_CHANNEL);
+    bcRef.current = bc;
+    bc.onmessage = (event) => {
+      const msg = event.data as CryptoBroadcastMessage | null;
+      if (!msg?.type) return;
+      // Any state change in another tab → drop our cryptoKey; user re-unlocks.
+      stopAutoSync();
+      clearSession();
+      setCryptoKey(null);
+      loadedWrapperRef.current = null;
+      autoUnlockAttempted.current = false;
+    };
+    return () => {
+      bc.close();
+      bcRef.current = null;
+    };
   }, []);
 
   // ── Idle auto-lock ──────────────────────────────────────────
@@ -279,6 +325,7 @@ export function CryptoProvider({ children }: { children: ReactNode }) {
       updatedAt: now,
     });
     setCryptoKey(result.masterKey);
+    loadedWrapperRef.current = result.encryptedMasterKey;
     saveSession(password);
     setPendingRecoveryKey(result.recoveryKey);
     // Advance sync cursor so any orphaned pre-setup entities are ignored
@@ -288,6 +335,9 @@ export function CryptoProvider({ children }: { children: ReactNode }) {
     } catch {}
     await syncPushSettings();
     startAutoSync();
+    try {
+      bcRef.current?.postMessage({ type: "setup" } satisfies CryptoBroadcastMessage);
+    } catch {}
   }, []);
 
   // ── Unlock ─────────────────────────────────────────────────
@@ -305,9 +355,13 @@ export function CryptoProvider({ children }: { children: ReactNode }) {
         );
         if (!masterKey) return false;
         setCryptoKey(masterKey);
+        loadedWrapperRef.current = settings.encryptedMasterKey;
         saveSession(password);
         syncPush().then(() => syncPull());
         startAutoSync();
+        try {
+          bcRef.current?.postMessage({ type: "unlock" } satisfies CryptoBroadcastMessage);
+        } catch {}
         return true;
       }
 
@@ -352,11 +406,15 @@ export function CryptoProvider({ children }: { children: ReactNode }) {
       });
 
       setCryptoKey(masterKey);
+      loadedWrapperRef.current = encryptedMasterKey;
       saveSession(password);
       setPendingRecoveryKey(recoveryKey);
       await syncPushSettings();
       syncPush().then(() => syncPull());
       startAutoSync();
+      try {
+        bcRef.current?.postMessage({ type: "unlock" } satisfies CryptoBroadcastMessage);
+      } catch {}
       return true;
     },
     [settings]
@@ -367,6 +425,11 @@ export function CryptoProvider({ children }: { children: ReactNode }) {
     stopAutoSync();
     clearSession();
     setCryptoKey(null);
+    loadedWrapperRef.current = null;
+    autoUnlockAttempted.current = false;
+    try {
+      bcRef.current?.postMessage({ type: "lock" } satisfies CryptoBroadcastMessage);
+    } catch {}
   }, []);
 
   // ── Change Password ────────────────────────────────────────
@@ -405,8 +468,12 @@ export function CryptoProvider({ children }: { children: ReactNode }) {
         updatedAt: Date.now(),
       });
 
+      loadedWrapperRef.current = encryptedMasterKey;
       saveSession(newPassword);
       await syncPushSettings();
+      try {
+        bcRef.current?.postMessage({ type: "unlock" } satisfies CryptoBroadcastMessage);
+      } catch {}
       return true;
     },
     [settings, cryptoKey]
@@ -440,10 +507,14 @@ export function CryptoProvider({ children }: { children: ReactNode }) {
       });
 
       setCryptoKey(masterKey);
+      loadedWrapperRef.current = encryptedMasterKey;
       saveSession(newPassword);
       await syncPushSettings();
       syncPush().then(() => syncPull());
       startAutoSync();
+      try {
+        bcRef.current?.postMessage({ type: "unlock" } satisfies CryptoBroadcastMessage);
+      } catch {}
       return true;
     },
     [settings]
@@ -483,10 +554,21 @@ export function CryptoProvider({ children }: { children: ReactNode }) {
 
   const decryptText = useCallback(
     async (encrypted: string): Promise<string> => {
-      if (!cryptoKey) throw new Error("App is locked");
-      return decrypt(cryptoKey, encrypted);
+      if (!cryptoKey) throw new Error(LOCK_ERROR_MESSAGE);
+      try {
+        return await decrypt(cryptoKey, encrypted);
+      } catch (e) {
+        // Real decrypt failure (tag mismatch, corrupted ciphertext, wrong key).
+        // Snapshot context so we can diagnose the next reported incident.
+        logDecryptFailure(e, {
+          loadedWrapper: loadedWrapperRef.current?.slice(0, 8) ?? null,
+          currentWrapper: settings?.encryptedMasterKey?.slice(0, 8) ?? null,
+          ct: encrypted?.slice(0, 20),
+        });
+        throw e;
+      }
     },
-    [cryptoKey]
+    [cryptoKey, settings?.encryptedMasterKey]
   );
 
   return (

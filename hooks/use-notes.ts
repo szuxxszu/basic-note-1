@@ -9,6 +9,7 @@ import { getOrderBetween } from "@/lib/fractional-index";
 import type { Note, Block } from "@/lib/types";
 import { syncPushEntity } from "@/lib/sync/engine";
 import { looksLikeCiphertext } from "@/lib/crypto";
+import { isLockError } from "@/lib/decrypt-diagnostics";
 import { tr } from "@/lib/i18n";
 
 export interface DecryptedNote extends Note {
@@ -48,8 +49,8 @@ export function useNotes(categoryId?: string | null) {
           try {
             const title = await decryptText(note.title);
             decryptedTitle = looksLikeCiphertext(title) ? tr("lock.decryptFail") : title;
-          } catch {
-            decryptedTitle = tr("lock.decryptFail");
+          } catch (e) {
+            decryptedTitle = isLockError(e) ? "" : tr("lock.decryptFail");
           }
 
           // Get first text block for preview

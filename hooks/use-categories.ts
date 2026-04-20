@@ -9,6 +9,7 @@ import { getOrderBetween } from "@/lib/fractional-index";
 import type { Category, CategoryTreeNode } from "@/lib/types";
 import { syncPushEntity } from "@/lib/sync/engine";
 import { looksLikeCiphertext } from "@/lib/crypto";
+import { isLockError } from "@/lib/decrypt-diagnostics";
 import { tr } from "@/lib/i18n";
 
 function buildTree(
@@ -58,8 +59,8 @@ export function useCategories() {
               return { ...cat, name: tr("lock.decryptFail") };
             }
             return { ...cat, name };
-          } catch {
-            return { ...cat, name: tr("lock.decryptFail") };
+          } catch (e) {
+            return { ...cat, name: isLockError(e) ? "" : tr("lock.decryptFail") };
           }
         })
       );

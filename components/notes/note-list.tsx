@@ -78,7 +78,7 @@ export function NoteList({
                   <MoreVertical className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" className="min-w-[166px]">
                 <DropdownMenuItem onClick={() => setEditOpen(true)}>
                   <Pencil className="h-4 w-4" />
                   {t("common.edit")}
