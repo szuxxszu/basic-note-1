@@ -200,7 +200,7 @@ export default function NoteEditorPage({
       </div>
 
       {/* Category + Created date */}
-      <div className="-mt-3 flex items-center justify-between">
+      <div className="-mt-[9px] flex items-center justify-between">
         <span className="text-sm text-muted-foreground">
           {categories.find((c) => c.id === note.categoryId)?.name ?? t("editor.uncategorized")}
         </span>
@@ -228,7 +228,7 @@ export default function NoteEditorPage({
       </div>
 
       {/* Title */}
-      <div className="-mt-3">
+      <div className="-mt-[15px]">
         <NoteTitle
           title={title}
           onTitleChange={handleTitleChange}
