@@ -307,9 +307,8 @@ export function BlockEditor({ noteId }: BlockEditorProps) {
         const newMeta: BlockMeta =
           block.type === "todo" ? { checked: false } : {};
 
-        createBlock(block.id, newType, after, newMeta).then(() => {
-          focusBlock(index + 1, false);
-        });
+        const newId = createBlock(block.id, newType, after, newMeta);
+        if (newId) focusBlock(index + 1, false);
         return;
       }
 
@@ -492,7 +491,7 @@ export function BlockEditor({ noteId }: BlockEditorProps) {
           : type === "todo"
             ? { checked: false }
             : {};
-      const newId = await createBlock(anchor?.id ?? null, type, "", meta);
+      const newId = createBlock(anchor?.id ?? null, type, "", meta);
       if (newId) {
         const newIdx = Math.min(blocks.length, focusedIndex + 1);
         focusBlock(newIdx);

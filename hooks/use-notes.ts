@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
@@ -21,6 +21,12 @@ export interface DecryptedNote extends Note {
 
 export function useNotes(categoryId?: string | null) {
   const { encryptText, decryptText, isUnlocked } = useCrypto();
+  // Cache (ciphertext → plaintext) so list re-renders don't redecrypt every
+  // title/preview on every DB change.
+  const decryptCacheRef = useRef<Map<string, string>>(new Map());
+  useEffect(() => {
+    if (!isUnlocked) decryptCacheRef.current.clear();
+  }, [isUnlocked]);
 
   const rawNotes = useLiveQuery(
     async () => {
@@ -42,28 +48,48 @@ export function useNotes(categoryId?: string | null) {
     async () => {
       if (!isUnlocked || !rawNotes || rawNotes.length === 0) return [];
 
+      const cache = decryptCacheRef.current;
+
+      const cachedDecrypt = async (ciphertext: string): Promise<string> => {
+        const hit = cache.get(ciphertext);
+        if (hit !== undefined) return hit;
+        const text = await decryptText(ciphertext);
+        cache.set(ciphertext, text);
+        return text;
+      };
+
       const decrypted = await Promise.all(
         rawNotes.map(async (note) => {
           let decryptedTitle = "";
           let preview = "";
           try {
-            const title = await decryptText(note.title);
+            const title = await cachedDecrypt(note.title);
             decryptedTitle = looksLikeCiphertext(title) ? tr("lock.decryptFail") : title;
           } catch (e) {
             decryptedTitle = isLockError(e) ? "" : tr("lock.decryptFail");
           }
 
-          // Get first text block for preview
+          // Preview: first non-empty, non-deleted block in sortOrder.
+          // An empty leading block (e.g., created by Enter at position 0)
+          // should not steal the preview from later content blocks.
           try {
             const blocks = await db.blocks
               .where("[noteId+sortOrder]")
               .between([note.id, ""], [note.id, "\uffff"])
-              .limit(1)
               .toArray();
-            if (blocks.length > 0 && blocks[0].content) {
-              const text = await decryptText(blocks[0].content);
-              preview = looksLikeCiphertext(text) ? "" : text;
-              if (preview.length > 80) preview = preview.slice(0, 80) + "…";
+            for (const block of blocks) {
+              if (block.deletedAt) continue;
+              if (!block.content) continue;
+              try {
+                const text = await cachedDecrypt(block.content);
+                if (looksLikeCiphertext(text)) continue;
+                const trimmed = text.trim();
+                if (!trimmed) continue;
+                preview = trimmed.length > 80 ? trimmed.slice(0, 80) + "…" : trimmed;
+                break;
+              } catch {
+                continue;
+              }
             }
           } catch {
             preview = "";

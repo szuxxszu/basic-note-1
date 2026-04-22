@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
@@ -28,6 +28,16 @@ export function useBlocks(noteId: string) {
     if (!isUnlocked) decryptCacheRef.current.clear();
   }, [isUnlocked]);
 
+  // Optimistic local blocks — rendered immediately on createBlock before the
+  // async encrypt + Dexie write has propagated. Entries get removed once the
+  // real ciphertext block shows up in rawBlocks.
+  const [optimisticBlocks, setOptimisticBlocks] = useState<DecryptedBlock[]>([]);
+
+  // Reset optimistic state when switching notes so stale items don't leak.
+  useEffect(() => {
+    setOptimisticBlocks([]);
+  }, [noteId]);
+
   const rawBlocks = useLiveQuery(
     () =>
       db.blocks
@@ -39,7 +49,17 @@ export function useBlocks(noteId: string) {
     [] as Block[]
   );
 
-  const blocks = useLiveQuery(
+  // Drop optimistic entries that have arrived in the real rawBlocks.
+  useEffect(() => {
+    if (!rawBlocks || rawBlocks.length === 0) return;
+    const realIds = new Set(rawBlocks.map((b) => b.id));
+    setOptimisticBlocks((prev) => {
+      const kept = prev.filter((b) => !realIds.has(b.id));
+      return kept.length === prev.length ? prev : kept;
+    });
+  }, [rawBlocks]);
+
+  const decryptedReal = useLiveQuery(
     async () => {
       if (!isUnlocked || !rawBlocks || rawBlocks.length === 0) return [];
       const cache = decryptCacheRef.current;
@@ -73,13 +93,24 @@ export function useBlocks(noteId: string) {
     [] as DecryptedBlock[]
   );
 
+  const blocks = useMemo<DecryptedBlock[]>(() => {
+    const real = decryptedReal ?? [];
+    if (optimisticBlocks.length === 0) return real;
+    const realIds = new Set(real.map((b) => b.id));
+    const pending = optimisticBlocks.filter((b) => !realIds.has(b.id));
+    if (pending.length === 0) return real;
+    return [...real, ...pending].sort((a, b) =>
+      a.sortOrder.localeCompare(b.sortOrder)
+    );
+  }, [decryptedReal, optimisticBlocks]);
+
   const createBlock = useCallback(
-    async (
+    (
       afterBlockId: string | null,
       type: BlockType = "text",
       content: string = "",
       meta: BlockMeta = {}
-    ): Promise<string | null> => {
+    ): string | null => {
       if (!isUnlocked) return null;
 
       const allBlocks = rawBlocks ?? [];
@@ -95,26 +126,51 @@ export function useBlocks(noteId: string) {
 
       const now = Date.now();
       const blockId = nanoid();
-      const encryptedContent = await encryptText(content);
+      const sortOrder = getOrderBetween(before, after);
 
-      await db.blocks.add({
+      // Optimistic: show the block right away, with plaintext already known.
+      const optimistic: DecryptedBlock = {
         id: blockId,
         noteId,
         type,
-        content: encryptedContent,
+        content: "",
+        decryptedContent: content,
         indent: 0,
-        sortOrder: getOrderBetween(before, after),
+        sortOrder,
         meta,
         createdAt: now,
         updatedAt: now,
         deletedAt: null,
-      });
+      };
+      setOptimisticBlocks((prev) => [...prev, optimistic]);
 
-      // Touch note updatedAt
-      await db.notes.update(noteId, { updatedAt: now });
-
-      const created = await db.blocks.get(blockId);
-      if (created) syncPushEntity("block", created);
+      // Persist in the background. Caller doesn't need to wait.
+      (async () => {
+        try {
+          const encryptedContent = await encryptText(content);
+          // Pre-populate decrypt cache so when rawBlocks updates, the block
+          // doesn't go through a redundant decrypt round-trip.
+          decryptCacheRef.current.set(encryptedContent, content);
+          await db.blocks.add({
+            id: blockId,
+            noteId,
+            type,
+            content: encryptedContent,
+            indent: 0,
+            sortOrder,
+            meta,
+            createdAt: now,
+            updatedAt: now,
+            deletedAt: null,
+          });
+          await db.notes.update(noteId, { updatedAt: now });
+          const created = await db.blocks.get(blockId);
+          if (created) syncPushEntity("block", created);
+        } catch (err) {
+          console.error("[useBlocks] createBlock persist failed:", err);
+          setOptimisticBlocks((prev) => prev.filter((b) => b.id !== blockId));
+        }
+      })();
 
       return blockId;
     },
@@ -136,6 +192,8 @@ export function useBlocks(noteId: string) {
       const patch: Partial<Block> = { updatedAt: Date.now() };
       if (updates.content !== undefined) {
         patch.content = await encryptText(updates.content);
+        // Keep the cache in sync so decryptedReal doesn't re-decrypt this.
+        decryptCacheRef.current.set(patch.content, updates.content);
       }
       if (updates.type !== undefined) patch.type = updates.type;
       if (updates.indent !== undefined) patch.indent = updates.indent;
@@ -152,6 +210,9 @@ export function useBlocks(noteId: string) {
 
   const deleteBlock = useCallback(
     async (blockId: string) => {
+      // If this was still in optimistic state (created so fast it hadn't hit
+      // the DB yet), drop it locally too.
+      setOptimisticBlocks((prev) => prev.filter((b) => b.id !== blockId));
       const now = Date.now();
       await db.blocks.update(blockId, { deletedAt: now, updatedAt: now });
       await db.notes.update(noteId, { updatedAt: now });
@@ -175,7 +236,7 @@ export function useBlocks(noteId: string) {
   );
 
   return {
-    blocks: blocks ?? [],
+    blocks,
     createBlock,
     updateBlock,
     deleteBlock,
