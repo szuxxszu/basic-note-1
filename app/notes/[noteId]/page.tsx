@@ -201,12 +201,7 @@ export default function NoteEditorPage({
 
       {/* Category + Created date */}
       <div className="-mt-3 flex items-center justify-between">
-        <span className="-ml-[1px] flex items-center gap-1.5 text-sm text-muted-foreground">
-          {note.categoryId ? (
-            <Folder className="h-4 w-4" />
-          ) : (
-            <Inbox className="h-4 w-4" />
-          )}
+        <span className="text-sm text-muted-foreground">
           {categories.find((c) => c.id === note.categoryId)?.name ?? t("editor.uncategorized")}
         </span>
         <Popover>
@@ -216,7 +211,6 @@ export default function NoteEditorPage({
               size="sm"
               className="shrink-0 text-muted-foreground"
             >
-              <CalendarIcon className="h-4 w-4" />
               {format(note.createdAt, "yyyy.MM.dd")}
             </Button>
           </PopoverTrigger>
