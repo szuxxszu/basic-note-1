@@ -300,9 +300,6 @@ export function BlockEditor({ noteId }: BlockEditorProps) {
         if (existing) clearTimeout(existing);
         saveTimers.current.delete(block.id);
         updateBlock(block.id, { content: before });
-        // Do NOT overwrite el.textContent here — that collapses the caret to
-        // position 0 and the user sees it jump before the new block takes over.
-        // Block components resync DOM to `content` on blur via the isFocused dep.
 
         const newType: BlockType =
           ["bullet", "numbered", "todo"].includes(block.type)
@@ -313,6 +310,15 @@ export function BlockEditor({ noteId }: BlockEditorProps) {
 
         const newId = createBlock(block.id, newType, after, newMeta);
         if (newId) focusBlock(index + 1, false);
+
+        // Sync the split block's DOM to `before` synchronously to eliminate
+        // the one-frame flicker where it still shows the full pre-split text
+        // until onBlur fires after paint. We blur first so the caret doesn't
+        // flash at position 0 before focus moves to the new block.
+        if (el) {
+          el.blur();
+          if (el.textContent !== before) el.textContent = before;
+        }
         return;
       }
 
