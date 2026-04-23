@@ -32,6 +32,7 @@ export interface Note {
   id: string;
   categoryId: string | null;
   title: string; // encrypted
+  content?: string; // encrypted plaintext body (new single-editable model)
   pinned: boolean;
   createdAt: number;
   updatedAt: number;

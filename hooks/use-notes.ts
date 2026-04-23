@@ -69,26 +69,39 @@ export function useNotes(categoryId?: string | null) {
             decryptedTitle = isLockError(e) ? "" : tr("lock.decryptFail");
           }
 
-          // Preview: first non-empty, non-deleted block in sortOrder.
-          // An empty leading block (e.g., created by Enter at position 0)
-          // should not steal the preview from later content blocks.
+          // Preview: prefer new single-editable `content`, fall back to
+          // first non-empty legacy block for unmigrated notes.
           try {
-            const blocks = await db.blocks
-              .where("[noteId+sortOrder]")
-              .between([note.id, ""], [note.id, "\uffff"])
-              .toArray();
-            for (const block of blocks) {
-              if (block.deletedAt) continue;
-              if (!block.content) continue;
-              try {
-                const text = await cachedDecrypt(block.content);
-                if (looksLikeCiphertext(text)) continue;
-                const trimmed = text.trim();
-                if (!trimmed) continue;
-                preview = trimmed.length > 80 ? trimmed.slice(0, 80) + "…" : trimmed;
-                break;
-              } catch {
-                continue;
+            if (note.content) {
+              const text = await cachedDecrypt(note.content);
+              if (!looksLikeCiphertext(text)) {
+                // First non-empty line.
+                for (const rawLine of text.split("\n")) {
+                  const line = rawLine.replace(/^( *)• /, "$1").trim();
+                  if (!line) continue;
+                  preview = line.length > 80 ? line.slice(0, 80) + "…" : line;
+                  break;
+                }
+              }
+            }
+            if (!preview) {
+              const blocks = await db.blocks
+                .where("[noteId+sortOrder]")
+                .between([note.id, ""], [note.id, "\uffff"])
+                .toArray();
+              for (const block of blocks) {
+                if (block.deletedAt) continue;
+                if (!block.content) continue;
+                try {
+                  const text = await cachedDecrypt(block.content);
+                  if (looksLikeCiphertext(text)) continue;
+                  const trimmed = text.trim();
+                  if (!trimmed) continue;
+                  preview = trimmed.length > 80 ? trimmed.slice(0, 80) + "…" : trimmed;
+                  break;
+                } catch {
+                  continue;
+                }
               }
             }
           } catch {

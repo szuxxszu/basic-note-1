@@ -9,7 +9,7 @@ import { useCrypto } from "@/components/providers/crypto-provider";
 import { useNotes } from "@/hooks/use-notes";
 import { looksLikeCiphertext } from "@/lib/crypto";
 import { isLockError } from "@/lib/decrypt-diagnostics";
-import { BlockEditor } from "@/components/editor/block-editor";
+import { PlainEditor } from "@/components/editor/plain-editor";
 import { NoteTitle } from "@/components/editor/note-title";
 import { Button } from "@minnjii/dx-kit/ui/button";
 import { Popover, PopoverTrigger, PopoverContent } from "@minnjii/dx-kit/ui/popover";
@@ -242,7 +242,7 @@ export default function NoteEditorPage({
       </div>
 
       {/* Block Editor */}
-      <BlockEditor noteId={noteId} />
+      <PlainEditor noteId={noteId} />
     </div>
   );
 }
