@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+} from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { useCrypto } from "@/components/providers/crypto-provider";
@@ -18,6 +24,11 @@ const BULLET = "• ";
 
 interface PlainEditorProps {
   noteId: string;
+}
+
+export interface PlainEditorHandle {
+  /** Toggle bullet (•) marker on the line where the caret currently sits. */
+  toggleBulletAtCaret: () => void;
 }
 
 // Read caret offset (as string index) within an element that only contains
@@ -131,7 +142,8 @@ async function migrateFromBlocks(
   return lines.join("\n");
 }
 
-export function PlainEditor({ noteId }: PlainEditorProps) {
+export const PlainEditor = forwardRef<PlainEditorHandle, PlainEditorProps>(
+  function PlainEditor({ noteId }, forwardedRef) {
   const { encryptText, decryptText, isUnlocked } = useCrypto();
   const note = useLiveQuery(() => db.notes.get(noteId), [noteId]);
   const ref = useRef<HTMLDivElement>(null);
@@ -288,6 +300,29 @@ export function PlainEditor({ noteId }: PlainEditorProps) {
         saveSoon(newText);
       }
 
+      // Auto-bullet: typing "- " or "* " at the start of a line (only indent
+      // before) converts to "• ".
+      if (e.key === " " && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const offset = getCaretOffset(el);
+        const text = el.textContent ?? "";
+        const { lineStart, line } = getLineInfo(text, offset);
+        const before = line.slice(0, offset - lineStart);
+        const match = before.match(/^( *)[-*]$/);
+        if (match) {
+          e.preventDefault();
+          const indent = match[1];
+          const newText =
+            text.slice(0, lineStart) +
+            indent +
+            BULLET +
+            text.slice(offset);
+          el.textContent = newText;
+          setCaretToOffset(el, lineStart + indent.length + BULLET.length);
+          saveSoon(newText);
+          return;
+        }
+      }
+
       if (e.key === "Backspace") {
         const offset = getCaretOffset(el);
         const text = el.textContent ?? "";
@@ -313,6 +348,47 @@ export function PlainEditor({ noteId }: PlainEditorProps) {
     [saveSoon]
   );
 
+  useImperativeHandle(
+    forwardedRef,
+    () => ({
+      toggleBulletAtCaret: () => {
+        const el = ref.current;
+        if (!el) return;
+        el.focus();
+        const offset = getCaretOffset(el);
+        const text = el.textContent ?? "";
+        const { lineStart, line, bulletIndent } = getLineInfo(text, offset);
+
+        if (bulletIndent !== null) {
+          // Remove bullet marker
+          const newText =
+            text.slice(0, lineStart) +
+            text.slice(lineStart).replace(/^( *)• /, "$1");
+          el.textContent = newText;
+          setCaretToOffset(
+            el,
+            Math.max(lineStart, offset - BULLET.length)
+          );
+          saveSoon(newText);
+        } else {
+          // Add bullet at start of line (keep leading indent)
+          const indentMatch = line.match(/^( *)/);
+          const indent = indentMatch ? indentMatch[1] : "";
+          const afterIndent = lineStart + indent.length;
+          const newText =
+            text.slice(0, afterIndent) + BULLET + text.slice(afterIndent);
+          el.textContent = newText;
+          setCaretToOffset(
+            el,
+            Math.max(afterIndent + BULLET.length, offset + BULLET.length)
+          );
+          saveSoon(newText);
+        }
+      },
+    }),
+    [saveSoon]
+  );
+
   // Fallback prop type: not every browser officially types "plaintext-only".
   const contentEditableAttr = "plaintext-only" as unknown as boolean;
 
@@ -326,4 +402,4 @@ export function PlainEditor({ noteId }: PlainEditorProps) {
       onKeyDown={handleKeyDown}
     />
   );
-}
+});

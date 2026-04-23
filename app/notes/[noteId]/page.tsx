@@ -9,7 +9,7 @@ import { useCrypto } from "@/components/providers/crypto-provider";
 import { useNotes } from "@/hooks/use-notes";
 import { looksLikeCiphertext } from "@/lib/crypto";
 import { isLockError } from "@/lib/decrypt-diagnostics";
-import { PlainEditor } from "@/components/editor/plain-editor";
+import { PlainEditor, type PlainEditorHandle } from "@/components/editor/plain-editor";
 import { NoteTitle } from "@/components/editor/note-title";
 import { Button } from "@minnjii/dx-kit/ui/button";
 import { Popover, PopoverTrigger, PopoverContent } from "@minnjii/dx-kit/ui/popover";
@@ -39,7 +39,7 @@ import {
 } from "@minnjii/dx-kit/ui/alert-dialog";
 import { useCategories } from "@/hooks/use-categories";
 import { useLanguage } from "@/components/providers/language-provider";
-import { ArrowLeft, MoreHorizontal, Trash2, Pin, PinOff, FolderInput, Folder, Inbox, Check, CalendarIcon } from "lucide-react";
+import { ArrowLeft, MoreHorizontal, Trash2, Pin, PinOff, FolderInput, Folder, Inbox, Check, CalendarIcon, List } from "lucide-react";
 
 export default function NoteEditorPage({
   params,
@@ -55,6 +55,7 @@ export default function NoteEditorPage({
 
   const [title, setTitle] = useState("");
   const titleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editorRef = useRef<PlainEditorHandle>(null);
 
   const note = useLiveQuery(() => db.notes.get(noteId), [noteId]);
 
@@ -104,6 +105,16 @@ export default function NoteEditorPage({
         >
           <ArrowLeft className="h-4 w-4" />
           {t("editor.back")}
+        </Button>
+        <div className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-foreground"
+          onClick={() => editorRef.current?.toggleBulletAtCaret()}
+          aria-label="불릿 토글"
+        >
+          <List className="h-4 w-4" />
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -197,6 +208,7 @@ export default function NoteEditorPage({
             </AlertDialog>
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
       </div>
 
       {/* Category + Created date */}
@@ -242,7 +254,7 @@ export default function NoteEditorPage({
       </div>
 
       {/* Block Editor */}
-      <PlainEditor noteId={noteId} />
+      <PlainEditor ref={editorRef} noteId={noteId} />
     </div>
   );
 }
