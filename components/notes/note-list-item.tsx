@@ -98,7 +98,7 @@ export function NoteListItem({
           <CardDescription className="line-clamp-1 flex-1 min-w-0">
             {note.preview || t("notes.noContent")}
           </CardDescription>
-          <span className="shrink-0 text-sm text-muted-foreground">
+          <span className="shrink-0 text-sm text-muted-foreground -mt-px">
             {format(note.createdAt, "yyyy.MM.dd")}
           </span>
         </div>
