@@ -97,7 +97,7 @@ export function NoteListItem({
         <CardAction className="self-stretch">
           <div className="flex h-full items-stretch gap-1.5">
             <div className="flex h-full flex-col justify-between items-end text-sm text-muted-foreground">
-              <span className="shrink-0 max-w-[140px] truncate leading-none mt-1">{folderName}</span>
+              <span className="shrink-0 max-w-[140px] truncate leading-none mt-1.5">{folderName}</span>
               <span className="shrink-0 leading-none">{format(note.createdAt, "yyyy.MM.dd")}</span>
             </div>
             {hasMenu && (
