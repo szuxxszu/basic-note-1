@@ -5,17 +5,14 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
 import { useCrypto } from "@/components/providers/crypto-provider";
-import { getOrderBetween } from "@/lib/fractional-index";
-import type { Note, Block } from "@/lib/types";
+import type { Note } from "@/lib/types";
 import { syncPushEntity } from "@/lib/sync/engine";
 import { looksLikeCiphertext } from "@/lib/crypto";
 import { isLockError } from "@/lib/decrypt-diagnostics";
 import { tr } from "@/lib/i18n";
 
 export interface DecryptedNote extends Note {
-  /** Decrypted title */
   decryptedTitle: string;
-  /** Preview text from first block */
   preview: string;
 }
 
@@ -35,7 +32,6 @@ export function useNotes(categoryId?: string | null) {
       const filtered = (categoryId !== undefined && categoryId !== null)
         ? active.filter((n) => n.categoryId === categoryId)
         : active;
-      // Pinned notes always on top
       const pinned = filtered.filter((n) => n.pinned);
       const unpinned = filtered.filter((n) => !n.pinned);
       return [...pinned, ...unpinned];
@@ -69,14 +65,10 @@ export function useNotes(categoryId?: string | null) {
             decryptedTitle = isLockError(e) ? "" : tr("lock.decryptFail");
           }
 
-          // Preview: prefer new single-editable `content`, fall back to
-          // first non-empty legacy block for unmigrated notes.
           try {
             if (note.content) {
               const raw = await cachedDecrypt(note.content);
               if (!looksLikeCiphertext(raw)) {
-                // Content may be HTML (new model) or plaintext (pre-HTML
-                // notes). Strip tags and grab first non-empty line.
                 let text = raw;
                 if (/<[a-z][^>]*>/i.test(raw)) {
                   if (typeof document !== "undefined") {
@@ -92,26 +84,6 @@ export function useNotes(categoryId?: string | null) {
                   if (!line) continue;
                   preview = line.length > 80 ? line.slice(0, 80) + "…" : line;
                   break;
-                }
-              }
-            }
-            if (!preview) {
-              const blocks = await db.blocks
-                .where("[noteId+sortOrder]")
-                .between([note.id, ""], [note.id, "\uffff"])
-                .toArray();
-              for (const block of blocks) {
-                if (block.deletedAt) continue;
-                if (!block.content) continue;
-                try {
-                  const text = await cachedDecrypt(block.content);
-                  if (looksLikeCiphertext(text)) continue;
-                  const trimmed = text.trim();
-                  if (!trimmed) continue;
-                  preview = trimmed.length > 80 ? trimmed.slice(0, 80) + "…" : trimmed;
-                  break;
-                } catch {
-                  continue;
                 }
               }
             }
@@ -137,37 +109,19 @@ export function useNotes(categoryId?: string | null) {
       const encryptedTitle = await encryptText("새 노트");
       const encryptedContent = await encryptText("");
 
-      await db.transaction("rw", db.notes, db.blocks, async () => {
-        await db.notes.add({
-          id: noteId,
-          categoryId,
-          title: encryptedTitle,
-          pinned: false,
-          createdAt: now,
-          updatedAt: now,
-          deletedAt: null,
-        });
-
-        // Create initial empty text block
-        await db.blocks.add({
-          id: nanoid(),
-          noteId,
-          type: "text",
-          content: encryptedContent,
-          indent: 0,
-          sortOrder: getOrderBetween(null, null),
-          meta: {},
-          createdAt: now,
-          updatedAt: now,
-          deletedAt: null,
-        });
+      await db.notes.add({
+        id: noteId,
+        categoryId,
+        title: encryptedTitle,
+        content: encryptedContent,
+        pinned: false,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
       });
 
-      // Sync note and block to remote
       const note = await db.notes.get(noteId);
       if (note) syncPushEntity("note", note);
-      const block = await db.blocks.where("noteId").equals(noteId).first();
-      if (block) syncPushEntity("block", block);
 
       return noteId;
     },
@@ -176,13 +130,7 @@ export function useNotes(categoryId?: string | null) {
 
   const deleteNote = useCallback(async (id: string) => {
     const now = Date.now();
-    await db.transaction("rw", db.notes, db.blocks, async () => {
-      await db.notes.update(id, { deletedAt: now, updatedAt: now });
-      await db.blocks
-        .where("noteId")
-        .equals(id)
-        .modify({ deletedAt: now, updatedAt: now });
-    });
+    await db.notes.update(id, { deletedAt: now, updatedAt: now });
     const deleted = await db.notes.get(id);
     if (deleted) syncPushEntity("note", deleted);
   }, []);

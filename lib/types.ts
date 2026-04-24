@@ -71,7 +71,7 @@ export interface AppSettings {
 
 // ─── Sync ────────────────────────────────────────────────────
 export type SyncOperation = "create" | "update" | "delete";
-export type SyncEntityType = "note" | "block" | "category";
+export type SyncEntityType = "note" | "category";
 
 export interface SyncMeta {
   id: string;

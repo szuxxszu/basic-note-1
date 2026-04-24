@@ -1,8 +1,8 @@
 import { supabase } from "@/lib/supabase";
 import { db } from "@/lib/db";
-import type { Category, Note, Block, AppSettings } from "@/lib/types";
+import type { Category, Note, AppSettings } from "@/lib/types";
 
-type EntityType = "category" | "note" | "block";
+type EntityType = "category" | "note";
 
 /**
  * Dev builds share the same Supabase project as production, which means any
@@ -25,7 +25,7 @@ interface EncryptedEntity {
 
 async function pushEntity(
   entityType: EntityType,
-  entity: Category | Note | Block
+  entity: Category | Note
 ) {
   const { id, ...rest } = entity;
   const row: EncryptedEntity = {
@@ -98,14 +98,6 @@ async function pullAll(lastSyncAt: number) {
           }
           break;
         }
-        case "block": {
-          const existing = await db.blocks.get(row.id);
-          if (!existing || existing.updatedAt < row.updated_at) {
-            await db.blocks.put(entity as Block);
-            count++;
-          }
-          break;
-        }
       }
     } catch (e) {
       console.error(`[sync] pull apply ${row.entity_type}/${row.id} failed:`, e);
@@ -162,12 +154,6 @@ export async function syncPush() {
       await pushEntity("note", note);
     }
 
-    // Push all blocks
-    const blocks = await db.blocks.toArray();
-    for (const block of blocks) {
-      await pushEntity("block", block);
-    }
-
     setLastSyncAt(Date.now());
   } catch (e) {
     console.error("[sync] push failed:", e);
@@ -199,7 +185,7 @@ export async function syncPullSettings(): Promise<AppSettings | null> {
 
 export async function syncPushEntity(
   entityType: EntityType,
-  entity: Category | Note | Block
+  entity: Category | Note
 ) {
   if (!SYNC_ENABLED) return;
   if (!navigator.onLine) return;
@@ -254,13 +240,6 @@ async function handleRealtimeChange(payload: {
         const existing = await db.notes.get(row.id);
         if (!existing || existing.updatedAt < row.updated_at) {
           await db.notes.put(entity as Note);
-        }
-        break;
-      }
-      case "block": {
-        const existing = await db.blocks.get(row.id);
-        if (!existing || existing.updatedAt < row.updated_at) {
-          await db.blocks.put(entity as Block);
         }
         break;
       }
