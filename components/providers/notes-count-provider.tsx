@@ -6,11 +6,13 @@ import { db } from "@/lib/db";
 
 interface CachedCounts {
   total: number;
+  uncategorized: number;
   byCategory: Record<string, number>;
 }
 
 interface NotesCountContextValue {
   total: number | undefined;
+  uncategorized: number | undefined;
   byCategory: Record<string, number> | undefined;
 }
 
@@ -27,6 +29,7 @@ function readCache(): CachedCounts | undefined {
     if (
       parsed &&
       typeof parsed.total === "number" &&
+      typeof parsed.uncategorized === "number" &&
       parsed.byCategory &&
       typeof parsed.byCategory === "object"
     ) {
@@ -61,14 +64,17 @@ export function NotesCountProvider({
     const all = await db.notes.toArray();
     const byCategory: Record<string, number> = {};
     let total = 0;
+    let uncategorized = 0;
     for (const n of all) {
       if (n.deletedAt) continue;
       total += 1;
       if (n.categoryId) {
         byCategory[n.categoryId] = (byCategory[n.categoryId] ?? 0) + 1;
+      } else {
+        uncategorized += 1;
       }
     }
-    return { total, byCategory };
+    return { total, uncategorized, byCategory };
   }, []);
 
   useEffect(() => {
@@ -78,7 +84,11 @@ export function NotesCountProvider({
   }, [result]);
 
   const value = useMemo<NotesCountContextValue>(
-    () => ({ total: hot?.total, byCategory: hot?.byCategory }),
+    () => ({
+      total: hot?.total,
+      uncategorized: hot?.uncategorized,
+      byCategory: hot?.byCategory,
+    }),
     [hot]
   );
 
@@ -94,7 +104,8 @@ export function useNotesCount(categoryId?: string | null): number | undefined {
   if (!ctx) {
     throw new Error("useNotesCount must be used within NotesCountProvider");
   }
-  if (typeof categoryId !== "string") return ctx.total;
+  if (categoryId === undefined) return ctx.total;
+  if (categoryId === null) return ctx.uncategorized;
   if (!ctx.byCategory) return undefined;
   return ctx.byCategory[categoryId] ?? 0;
 }

@@ -31,6 +31,7 @@ import { toast } from "sonner";
 import { useLoadingIndicator } from "@/components/providers/global-loading";
 import { useCategories } from "@/hooks/use-categories";
 import { useNotes } from "@/hooks/use-notes";
+import { useNotesCount } from "@/components/providers/notes-count-provider";
 import { NoteCard } from "@/components/notes/note-card";
 import { CategoryDialog } from "@/components/dialogs/category-dialog";
 import { useLanguage } from "@/components/providers/language-provider";
@@ -52,6 +53,11 @@ function CategoryBranch({
 }) {
   const { t } = useLanguage();
   const categoryNotes = allNotes.filter((n) => n.categoryId === node.id);
+  // Use the layout-level count context so the badge doesn't flash "(0)" while
+  // useNotes finishes its async decrypt. Falls back to the local filter if the
+  // context value isn't ready yet (e.g. very first visit, sessionStorage miss).
+  const hotCount = useNotesCount(node.id);
+  const displayCount = hotCount ?? categoryNotes.length;
 
   return (
     <AccordionBlockItem value={node.id}>
@@ -82,7 +88,7 @@ function CategoryBranch({
       >
         <div className="flex items-center gap-2">
           <Folder className="category-folder h-4 w-4 shrink-0" />
-          <span>{node.name} <span className="text-[13px]">({categoryNotes.length})</span></span>
+          <span>{node.name} <span className="text-[13px]">({displayCount})</span></span>
         </div>
       </AccordionBlockTrigger>
       <AccordionBlockContent>
@@ -137,6 +143,8 @@ export default function CategoriesPage() {
   const advancingToStep2Ref = useRef(false);
 
   const uncategorizedNotes = notes.filter((n) => !n.categoryId);
+  const hotUncategorized = useNotesCount(null);
+  const uncategorizedCount = hotUncategorized ?? uncategorizedNotes.length;
 
   const handleCreateNote = async () => {
     const noteId = await createNote(null);
@@ -207,12 +215,12 @@ export default function CategoriesPage() {
             />
           ))}
 
-          {uncategorizedNotes.length > 0 && (
+          {uncategorizedCount > 0 && (
             <AccordionBlockItem value="__uncategorized">
               <AccordionBlockTrigger>
                 <div className="flex items-center gap-2">
                   <FileText className="uncategorized-icon h-4 w-4 shrink-0" />
-                  <span>{t("categories.uncategorized")} <span className="text-[13px]">({uncategorizedNotes.length})</span></span>
+                  <span>{t("categories.uncategorized")} <span className="text-[13px]">({uncategorizedCount})</span></span>
                 </div>
               </AccordionBlockTrigger>
               <AccordionBlockContent>
