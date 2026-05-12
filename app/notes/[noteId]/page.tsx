@@ -109,7 +109,7 @@ export default function NoteEditorPage({
 
         {/* Center: formatting toolbar. Absolute center so neighbor widths
             don't push it off balance. */}
-        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-0.5">
+        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-0">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="text-foreground h-8 w-8 p-0" aria-label="사이즈">
