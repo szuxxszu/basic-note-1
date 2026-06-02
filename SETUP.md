@@ -6,13 +6,6 @@
 
 운영자 없이 각자 자기 서버에서 동작합니다.
 
-<br/>
-
-![소요시간](https://img.shields.io/badge/소요시간-약_10분-3ECF8E?style=flat-square)
-![비용](https://img.shields.io/badge/비용-무료_플랜으로_충분-000000?style=flat-square)
-![신용카드](https://img.shields.io/badge/신용카드-불필요-blue?style=flat-square)
-![암호화](https://img.shields.io/badge/암호화-AES--256--GCM-success?style=flat-square)
-
 </div>
 
 ---
