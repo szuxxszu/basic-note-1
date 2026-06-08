@@ -10,8 +10,12 @@ import { useLanguage } from "@/components/providers/language-provider";
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
 
 // Guards against a reload loop: if a reload didn't resolve the mismatch
-// (e.g. a stale cache), we fall back to a manual banner instead of looping.
+// (e.g. a stale cache), we escalate to a hard cache purge, and only then fall
+// back to a manual banner instead of looping.
+//  - SOFT guard: a normal reg.update() + reload was already tried for version X.
+//  - HARD guard: a full SW-unregister + cache-purge + reload was already tried.
 const RELOAD_GUARD_KEY = "bn_update_reloaded_for";
+const HARD_GUARD_KEY = "bn_update_hard_reset_for";
 
 async function fetchServerVersion(): Promise<string | null> {
   try {
@@ -45,6 +49,32 @@ export function UpdateGate() {
     setTimeout(() => window.location.reload(), 1200);
   }, []);
 
+  // Escalation when a normal update reload didn't take: the running bundle is
+  // still behind even after reg.update() + reload, which means a stale service
+  // worker is serving old /_next/static chunks (cache-first). A new route's
+  // chunk can be missing entirely → navigation to it fails. Cure: unregister
+  // every SW and delete all caches, then reload from the network for a clean
+  // build. IndexedDB (notes) and the auth session are NOT touched — this only
+  // clears HTTP-level caches and only runs online with a confirmed mismatch.
+  const hardReset = useCallback(async (serverVersion: string) => {
+    setUpdating(true);
+    setBannerVersion(null);
+    try {
+      sessionStorage.setItem(HARD_GUARD_KEY, serverVersion);
+    } catch {}
+    try {
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } catch {}
+    setTimeout(() => window.location.reload(), 1200);
+  }, []);
+
   // Initial entry: if this bundle is behind the live deploy, auto-apply with a
   // full-screen "updating" screen.
   useEffect(() => {
@@ -55,17 +85,23 @@ export function UpdateGate() {
     (async () => {
       const serverVersion = await fetchServerVersion();
       if (!serverVersion || serverVersion === APP_VERSION) return;
-      let alreadyTried = false;
+      let softTried = false;
+      let hardTried = false;
       try {
-        alreadyTried = sessionStorage.getItem(RELOAD_GUARD_KEY) === serverVersion;
+        softTried = sessionStorage.getItem(RELOAD_GUARD_KEY) === serverVersion;
+        hardTried = sessionStorage.getItem(HARD_GUARD_KEY) === serverVersion;
       } catch {}
-      if (alreadyTried) {
+      // First pass: normal SW update + reload. Second pass (soft didn't take):
+      // hard cache purge. Third pass (still stuck): manual banner — don't loop.
+      if (!softTried) {
+        applyUpdate(serverVersion);
+      } else if (!hardTried) {
+        hardReset(serverVersion);
+      } else {
         setBannerVersion(serverVersion);
-        return;
       }
-      applyUpdate(serverVersion);
     })();
-  }, [applyUpdate]);
+  }, [applyUpdate, hardReset]);
 
   // Re-check when the app regains focus (PWA kept open across a deploy).
   // Mid-use we show a non-intrusive banner rather than reloading abruptly.
@@ -106,7 +142,21 @@ export function UpdateGate() {
       <div className="fixed inset-x-0 bottom-5 z-[100] flex justify-center px-4">
         <div className="flex items-center gap-4 rounded-2xl bg-card px-5 py-3 text-card-foreground shadow-lg shadow-black/10 dark:shadow-black/40">
           <span className="text-sm font-medium">{t("update.available")}</span>
-          <Button size="sm" onClick={() => applyUpdate(bannerVersion)}>
+          <Button
+            size="sm"
+            onClick={() => {
+              // If a soft reload was already tried for this version, the cache
+              // is stuck — go straight to the hard purge. Otherwise the gentle
+              // path covers normal updates without re-downloading everything.
+              let softTried = false;
+              try {
+                softTried =
+                  sessionStorage.getItem(RELOAD_GUARD_KEY) === bannerVersion;
+              } catch {}
+              if (softTried) hardReset(bannerVersion);
+              else applyUpdate(bannerVersion);
+            }}
+          >
             {t("update.refresh")}
           </Button>
         </div>
